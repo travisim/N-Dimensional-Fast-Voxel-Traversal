@@ -192,18 +192,54 @@ class ObstacleRayTracer:
         if self.loose_dimension <= 0 or self.loose_dimension > self.tracer.n:
             raise ValueError("loose_dimension must be between 1 and the number of dimensions (inclusive)")
 
-        change_dims = [i for i, d in enumerate(self.tracer.delta_x_sign) if d != 0]
-        
         all_offsets = []
         
+        # The dimensions along which the ray is moving
+        ray_move_dims = [i for i, d in enumerate(self.tracer.delta_x_sign) if d != 0]
+
+        # Generate offsets for dimensions with movement
         for i in range(1, self.loose_dimension + 1):
-            if len(change_dims) < i:
+            if len(ray_move_dims) < i:
                 break
-            for dims_to_change in itertools.combinations(change_dims, i):
+            for dims_to_change in itertools.combinations(ray_move_dims, i):
                 offset = np.zeros(self.tracer.n, dtype=int)
                 for dim in dims_to_change:
                     offset[dim] = self.tracer.delta_x_sign[dim]
                 all_offsets.append(offset)
+
+        # Generate offsets for dimensions without movement
+        non_move_dims = [i for i, d in enumerate(self.tracer.delta_x_sign) if d == 0]
+        for i in range(1, self.loose_dimension + 1):
+            if len(non_move_dims) < i:
+                break
+            for dims_to_change in itertools.combinations(non_move_dims, i):
+                # For each combination, generate all possible sign combinations
+                for signs in itertools.product([-1, 1], repeat=i):
+                    offset = np.zeros(self.tracer.n, dtype=int)
+                    for j, dim in enumerate(dims_to_change):
+                        offset[dim] = signs[j]
+                    all_offsets.append(offset)
+        
+        # Also handle mixed offsets
+        if self.loose_dimension > 1:
+            for i in range(1, self.loose_dimension):
+                # i = number of moving dimensions
+                # self.loose_dimension - i = number of non-moving dimensions
+                
+                num_non_move_dims = self.loose_dimension - i
+                if len(ray_move_dims) < i or len(non_move_dims) < num_non_move_dims:
+                    continue
+
+                for move_dims_combo in itertools.combinations(ray_move_dims, i):
+                    for non_move_dims_combo in itertools.combinations(non_move_dims, num_non_move_dims):
+                        for signs in itertools.product([-1, 1], repeat=num_non_move_dims):
+                            offset = np.zeros(self.tracer.n, dtype=int)
+                            for dim in move_dims_combo:
+                                offset[dim] = self.tracer.delta_x_sign[dim]
+                            for j, dim in enumerate(non_move_dims_combo):
+                                offset[dim] = signs[j]
+                            all_offsets.append(offset)
+
         return all_offsets
 
     def _dfs_get_traced_cells(self, start_cell: tuple, search_space: set, is_obstacle_func: Callable[[Tuple[int, ...]], bool]) -> set:
