@@ -47,40 +47,35 @@ class RayTracerBase:
         
         self.delta_x = self.x_f - self.x_0
         self.abs_delta_x = np.abs(self.delta_x)
-        self.delta_x_sign = np.array([self._sign(dx) for dx in self.delta_x])
         self.l = 0
         self.k = np.zeros(self.n, dtype=int)
         self.norm_delta_x = np.linalg.norm(self.delta_x)
-        self.y = self._floor_ceil_conditional(self.x_0, -self.delta_x).astype(int)
         
-        self._determine_front_cells()
-
+        # Initialize arrays
+        self.delta_x_sign = np.zeros(self.n, dtype=int)
+        self.y = np.zeros(self.n, dtype=int)
         self.D = np.zeros(self.n)
+        
+        # Threshold for determining if delta_x is significant
+        THRES = 1e-10
+        
+        # Calculate D, delta_x_sign, and y according to the algorithm in the picture
         for i in range(self.n):
-            if self.delta_x[i] < 0:
-                self.D[i] = (np.floor(self.x_0[i]) - self.x_0[i]) / self.delta_x[i]
-            elif abs(self.delta_x[i]) < 1e-10:
+            if self.delta_x[i] > THRES:
+                self.delta_x_sign[i] = 1
+                self.y[i] = int(np.floor(self.x_0[i]))
+                self.D[i] = (self.y[i] - self.x_0[i] + self.delta_x_sign[i]) / self.delta_x[i]
+            elif self.delta_x[i] < -THRES:
+                self.delta_x_sign[i] = -1
+                self.y[i] = int(np.ceil(self.x_0[i]))
+                self.D[i] = (self.y[i] - self.x_0[i] + self.delta_x_sign[i]) / self.delta_x[i]
+            else:
+                self.delta_x_sign[i] = 0
                 self.D[i] = float('inf')
-            else:
-                self.D[i] = (np.ceil(self.x_0[i]) - self.x_0[i]) / self.delta_x[i]
-
-            if abs(self.D[i]) < 1e-9 and abs(self.delta_x[i]) > 1e-9:
-                self.D[i] = 1.0 / abs(self.delta_x[i])
+                self.y[i] = int(np.floor(self.x_0[i]))
+        
         self.D_0 = self.D.copy()
-
-    def _floor_ceil_conditional(self, a: np.ndarray, b: np.ndarray) -> np.ndarray:
-        result = np.zeros_like(a)
-        for i in range(len(a)):
-            if b[i] <= 0:
-                result[i] = np.floor(a[i])
-            else:
-                result[i] = np.ceil(a[i])
-        return result
-    
-    def _sign(self, x: float) -> int:
-        if x > 0: return 1
-        elif x == 0: return 0
-        else: return -1
+        self._determine_front_cells()
 
     def _determine_front_cells(self):
         self.F = np.array(self._determine_front_cells_recursive(0, np.zeros(self.n, dtype=int)))
@@ -90,7 +85,9 @@ class RayTracerBase:
             return [current_f.copy()]
 
         f_list = []
-        is_delta_x_zero = abs(self.delta_x[dim]) < 1e-10
+        # Use the same threshold as in D calculation
+        THRES = 1e-10
+        is_delta_x_zero = abs(self.delta_x[dim]) <= THRES
         is_x0_integer = abs(self.x_0[dim] - round(self.x_0[dim])) < 1e-10
 
         if is_delta_x_zero and is_x0_integer:
@@ -146,6 +143,92 @@ class RayTracerBase:
         self.t += 1
         self._determine_front_cells()
 
+class RayTracerBaseIntegerOptimized(RayTracerBase):
+    """
+    N-Dimensional Ray Tracer optimized for integer start and end coordinates.
+    """
+    def init(self, x_0: np.ndarray, x_f: np.ndarray):
+        """
+        Initializes the ray from start (x_0) to goal (x_f).
+        Assumes x_0 and x_f contain integers.
+        This is an optimized version of RayTracerBase.init for integer coordinates.
+        """
+        self.x_0 = np.array(x_0, dtype=int)
+        self.x_f = np.array(x_f, dtype=int)
+        self.n = len(x_0)
+        self.t = 0
+        
+        self.delta_x = self.x_f - self.x_0
+        self.abs_delta_x = np.abs(self.delta_x)
+        self.l = 0
+        self.k = np.zeros(self.n, dtype=int)
+        self.norm_delta_x = np.linalg.norm(self.delta_x)
+        
+        # Initialize arrays
+        self.delta_x_sign = np.sign(self.delta_x).astype(int)
+        self.y = self.x_0.copy()
+        self.D = np.zeros(self.n, dtype=float)
+        
+        # Calculate D
+        for i in range(self.n):
+            if self.abs_delta_x[i] == 0:
+                self.D[i] = float('inf')
+            else:
+                self.D[i] = 1.0 / self.abs_delta_x[i]
+        
+        self.D_0 = self.D.copy()
+        self._determine_front_cells()
+
+    def _determine_front_cells_recursive(self, dim, current_f):
+        if dim == self.n:
+            return [current_f.copy()]
+
+        f_list = []
+        
+        # If delta_x is zero for the current dimension, the front can be on either side.
+        if self.delta_x[dim] == 0:
+            # Case 1: f[dim] = -1
+            current_f[dim] = -1
+            f_list.extend(self._determine_front_cells_recursive(dim + 1, current_f))
+            
+            # Case 2: f[dim] = 0
+            current_f[dim] = 0
+            f_list.extend(self._determine_front_cells_recursive(dim + 1, current_f))
+        else:
+            # If delta_x is not zero, the front is determined by the sign of delta_x.
+            current_f[dim] = -1 if self.delta_x_sign[dim] < 0 else 0
+            f_list.extend(self._determine_front_cells_recursive(dim + 1, current_f))
+            
+        return f_list
+
+
+class RayTracer:
+    """
+    A factory and proxy for ray tracer implementations.
+    It selects the appropriate tracer (float or integer-optimized)
+    based on the input coordinates and delegates calls to it.
+    """
+    def __init__(self):
+        self._tracer: Optional[RayTracerBase] = None
+
+    def init(self, x_0: np.ndarray, x_f: np.ndarray):
+        x_0_arr = np.asarray(x_0)
+        x_f_arr = np.asarray(x_f)
+
+        is_integer_input = np.all(np.mod(x_0_arr, 1) == 0) and np.all(np.mod(x_f_arr, 1) == 0)
+
+        if is_integer_input:
+            self._tracer = RayTracerBaseIntegerOptimized()
+        else:
+            self._tracer = RayTracerBase()
+        
+        self._tracer.init(x_0_arr, x_f_arr)
+
+    def __getattr__(self, name: str) -> Any:
+        if self._tracer is None:
+            raise AttributeError("RayTracer has not been initialized. Call init() first.")
+        return getattr(self._tracer, name)
+
 class ObstacleSet:
     """
     Manages the set of obstacles.
@@ -162,7 +245,7 @@ class ObstacleRayTracer:
     A wrapper for RayTracerBase that handles obstacle detection.
     """
     def __init__(self):
-        self.tracer = RayTracerBase()
+        self.tracer = RayTracer()
         self.obstacle_manager: Optional[ObstacleSet] = None
         self.prev_front_cell_status: Optional[np.ndarray] = None
         self.current_front_cell_status: Optional[np.ndarray] = None
