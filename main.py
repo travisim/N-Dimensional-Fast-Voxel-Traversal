@@ -162,11 +162,24 @@ if __name__ == "__main__":
         # Organization: Integer coordinates first, then 2D first, then 3D
         # ============================================================================
         
-        # 5.1 Integer Coordinates Loose Dimension Tests
-        {"dim": 2, "label": "Loose-2D-Dim2", "x_0": np.array([1, 1]), "x_f": np.array([4, 4]), "obstacles": [np.array([2, 2]), np.array([3, 3])], "loose_dimension": 2},
-        {"dim": 3, "label": "Loose-3D-Dim1", "x_0": np.array([1, 1, 1]), "x_f": np.array([3, 3, 3]), "obstacles": [np.array([2, 1, 1]), np.array([1, 1, 2]), np.array([1, 2, 1])], "loose_dimension": 1},
-        {"dim": 3, "label": "Loose-3D-Dim2", "x_0": np.array([1, 1, 1]), "x_f": np.array([3, 3, 3]), "obstacles": [np.array([2, 1, 1]), np.array([1, 1, 2]), np.array([1, 2, 1]), np.array([2, 1, 2]), np.array([1, 2, 2])], "loose_dimension": 2},
-        {"dim": 3, "label": "Loose-3D-Dim3", "x_0": np.array([1, 1, 1]), "x_f": np.array([3, 3, 3]), "obstacles": [np.array([2, 1, 1]), np.array([1, 1, 2]), np.array([1, 2, 1]), np.array([2, 1, 2]), np.array([1, 2, 2]), np.array([2, 2, 1])], "loose_dimension": 3},
+        # ========================================
+        # Loose Dimension Connectivity Tests
+        # ========================================
+        {"dim": 2, "label": "2D Loose Connectivity", "x_0": np.array([1, 1]), "x_f": np.array([5, 5]), "obstacles": [np.array([2, 1]), np.array([1, 2])], "loose_dimension": 1},
+        
+        {"dim": 3, "label": "3D Loose Connectivity (loose=1)", "x_0": np.array([1, 1, 1]), "x_f": np.array([3, 3, 3]), "obstacles": [np.array([2, 1, 1]), np.array([1, 1, 2]), np.array([1, 2, 1])], "loose_dimension": 1},
+        {"dim": 3, "label": "3D Loose Connectivity (loose=2)", "x_0": np.array([1, 1, 1]), "x_f": np.array([3, 3, 3]), "obstacles": [np.array([2, 1, 1]), np.array([1, 1, 2]), np.array([1, 2, 1])], "loose_dimension": 2},
+        {"dim": 3, "label": "3D Dense Obstacles (loose=2)", "x_0": np.array([1, 1, 1]), "x_f": np.array([3, 3, 3]), "obstacles": [np.array([2, 1, 1]), np.array([1, 1, 2]), np.array([1, 2, 1]), np.array([2, 1, 2]), np.array([1, 2, 2]), np.array([2, 2, 1])], "loose_dimension": 2},
+        {"dim": 3, "label": "3D Dense Obstacles (loose=3)", "x_0": np.array([1, 1, 1]), "x_f": np.array([3, 3, 3]), "obstacles": [np.array([2, 1, 1]), np.array([1, 1, 2]), np.array([1, 2, 1]), np.array([2, 1, 2]), np.array([1, 2, 2]), np.array([2, 2, 1])], "loose_dimension": 3},
+
+        # ========================================
+        # Complex Obstacle Scenarios
+        # ========================================
+        {"dim": 3, "label": "Y-axis Ray Same Start/Goal", "x_0": np.array([2, 0, 3]), "x_f": np.array([2, 0, 3]), "obstacles": [np.array([1, 2, 3]), np.array([1, 3, 3]), np.array([2, 2, 2]), np.array([2, 3, 2]), np.array([2, 2, 3]), np.array([1, 3, 2])], "loose_dimension": 2},
+        {"dim": 3, "label": "Y-axis Ray with Obstacles (loose=2)", "x_0": np.array([2, 0, 3]), "x_f": np.array([2, 5, 3]), "obstacles": [np.array([1, 2, 3]), np.array([1, 3, 3]), np.array([2, 2, 2]), np.array([2, 3, 2]), np.array([2, 2, 3]), np.array([1, 3, 2])], "loose_dimension": 2},
+        {"dim": 3, "label": "Y-axis Ray with Obstacles (loose=3)", "x_0": np.array([2, 0, 3]), "x_f": np.array([2, 5, 3]), "obstacles": [np.array([1, 2, 3]), np.array([1, 3, 3]), np.array([2, 2, 2]), np.array([2, 3, 2]), np.array([2, 2, 3]), np.array([1, 3, 2])], "loose_dimension": 3},
+        {"dim": 3, "label": "Y-axis Ray Duplicate (loose=3)", "x_0": np.array([2, 0, 3]), "x_f": np.array([2, 5, 3]), "obstacles": [np.array([1, 2, 3]), np.array([1, 3, 3]), np.array([2, 2, 2]), np.array([2, 3, 2]), np.array([2, 2, 3]), np.array([1, 3, 2])], "loose_dimension": 3},
+        
         
         # ============================================================================
         # SECTION 6: PERFORMANCE AND STRESS TESTS
