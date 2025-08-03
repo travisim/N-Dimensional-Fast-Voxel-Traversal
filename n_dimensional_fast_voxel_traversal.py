@@ -3,9 +3,6 @@ import itertools
 from typing import List, Tuple, Optional, Dict, Any, Callable
 
 def round2(x):
-    """
-    Rounds a float, int, or numpy array to 2 decimal places.
-    """
     if isinstance(x, (float, int)):
         return round(x, 2)
     elif isinstance(x, np.ndarray):
@@ -16,79 +13,72 @@ def round2(x):
         return x
 
 class RayTracerBase:
-    """
-    Base N-Dimensional Ray Tracer.
-    Handles the core ray tracing logic without obstacles or visualization.
-    """
     def __init__(self):
-        self.x_0: Optional[np.ndarray] = None
-        self.x_f: Optional[np.ndarray] = None
-        self.delta_x: Optional[np.ndarray] = None
-        self.abs_delta_x: Optional[np.ndarray] = None
-        self.norm_delta_x: Optional[float] = None
-        self.delta_x_sign: Optional[np.ndarray] = None
-        self.k: Optional[np.ndarray] = None
-        self.D: Optional[np.ndarray] = None
-        self.D_0: Optional[np.ndarray] = None
-        self.y: Optional[np.ndarray] = None
-        self.F: Optional[np.ndarray] = None
-        self.l: float = 0
+        self._initial_corner_coords: Optional[np.ndarray] = None
+        self._final_corner_coords: Optional[np.ndarray] = None
+        self._direction: Optional[np.ndarray] = None
+        self._abs_direction: Optional[np.ndarray] = None
+        self._total_dist: Optional[float] = None
+        self._sign_direction: Optional[np.ndarray] = None
+        self._fractional_dist_counters: Optional[np.ndarray] = None
+        self._next_fractional_dist: Optional[np.ndarray] = None
+        self._initial_fractional_dist: Optional[np.ndarray] = None
+        self._current_corner_coords: Optional[np.ndarray] = None
+        self._adjacent_center_coords: Optional[np.ndarray] = None
+        self._current_fractional_dist: float = 0
         self.t: int = 0
         self.n: int = 0
 
     def init(self, x_0: np.ndarray, x_f: np.ndarray):
-        """
-        Initializes the ray from start (x_0) to goal (x_f).
-        """
-        self.x_0 = np.array(x_0, dtype=float)
-        self.x_f = np.array(x_f, dtype=float)
+        self._initial_corner_coords = np.array(x_0, dtype=float)
+        self._final_corner_coords = np.array(x_f, dtype=float)
         self.n = len(x_0)
         self.t = 0
         
-        self.delta_x = self.x_f - self.x_0
-        self.abs_delta_x = np.abs(self.delta_x)
-        self.l = 0
-        self.k = np.zeros(self.n, dtype=int)
-        self.norm_delta_x = np.linalg.norm(self.delta_x)
+        self._direction = self._final_corner_coords - self._initial_corner_coords
+        self._abs_direction = np.abs(self._direction)
+        self._current_fractional_dist = 0
+        self._fractional_dist_counters = np.zeros(self.n, dtype=int)
+        self._total_dist = np.linalg.norm(self._direction)
         
-        # Initialize arrays
-        self.delta_x_sign = np.zeros(self.n, dtype=int)
-        self.y = np.zeros(self.n, dtype=int)
-        self.D = np.zeros(self.n)
+        self._sign_direction = np.zeros(self.n, dtype=int)
+        self._current_corner_coords = np.zeros(self.n, dtype=int)
+        self._next_fractional_dist = np.zeros(self.n)
+        self._initial_fractional_dist = np.zeros(self.n)
         
-        # Threshold for determining if delta_x is significant
         THRES = 1e-10
         
-        # Calculate D, delta_x_sign, and y according to the algorithm in the picture
         for i in range(self.n):
-            if self.delta_x[i] > THRES:
-                self.delta_x_sign[i] = 1
-                self.y[i] = int(np.floor(self.x_0[i]))
-                self.D[i] = (self.y[i] - self.x_0[i] + self.delta_x_sign[i]) / self.delta_x[i]
-            elif self.delta_x[i] < -THRES:
-                self.delta_x_sign[i] = -1
-                self.y[i] = int(np.ceil(self.x_0[i]))
-                self.D[i] = (self.y[i] - self.x_0[i] + self.delta_x_sign[i]) / self.delta_x[i]
+            if self._direction[i] > THRES:
+                self._sign_direction[i] = 1
+                self._current_corner_coords[i] = int(np.floor(self._initial_corner_coords[i]))
+                self._initial_fractional_dist[i] = (self._current_corner_coords[i] - self._initial_corner_coords[i] + self._sign_direction[i]) / self._direction[i]
+                self._next_fractional_dist[i] = self._initial_fractional_dist[i]
+            elif self._direction[i] < -THRES:
+                self._sign_direction[i] = -1
+                self._current_corner_coords[i] = int(np.ceil(self._initial_corner_coords[i]))
+                self._initial_fractional_dist[i] = (self._current_corner_coords[i] - self._initial_corner_coords[i] + self._sign_direction[i]) / self._direction[i]
+                self._next_fractional_dist[i] = self._initial_fractional_dist[i]
             else:
-                self.delta_x_sign[i] = 0
-                self.D[i] = float('inf')
-                self.y[i] = int(np.floor(self.x_0[i]))
+                self._sign_direction[i] = 0
+                self._initial_fractional_dist[i] = float('inf')
+                self._next_fractional_dist[i] = float('inf')
+                self._current_corner_coords[i] = int(np.floor(self._initial_corner_coords[i]))
         
-        self.D_0 = self.D.copy()
         self._determine_front_cells()
 
     def _determine_front_cells(self):
-        self.F = np.array(self._determine_front_cells_recursive(0, np.zeros(self.n, dtype=int)))
+        self._adjacent_center_coords = np.array(self._determine_front_cells_recursive(0, np.zeros(self.n, dtype=int)))
 
     def _determine_front_cells_recursive(self, dim, current_f):
         if dim == self.n:
             return [current_f.copy()]
 
         f_list = []
-        # Use the same threshold as in D calculation
         THRES = 1e-10
-        is_delta_x_zero = abs(self.delta_x[dim]) <= THRES
-        is_x0_integer = abs(self.x_0[dim] - round(self.x_0[dim])) < 1e-10
+        
+        is_delta_x_zero = abs(self._direction[dim]) <= THRES
+        is_x0_integer = abs(self._initial_corner_coords[dim] - round(self._initial_corner_coords[dim])) < 1e-10
 
         if is_delta_x_zero and is_x0_integer:
             current_f[dim] = -1
@@ -97,7 +87,7 @@ class RayTracerBase:
             current_f[dim] = 0
             f_list.extend(self._determine_front_cells_recursive(dim + 1, current_f))
         else:
-            if self.delta_x_sign[dim] < 0:
+            if self._sign_direction[dim] < 0:
                 current_f[dim] = -1
             else:
                 current_f[dim] = 0
@@ -105,122 +95,52 @@ class RayTracerBase:
         return f_list
 
     def coords(self) -> np.ndarray:
-        if self.norm_delta_x == 0:
-            return self.x_0.copy()
-        return self.x_0 + (self.l / self.norm_delta_x) * self.delta_x
+        if self._total_dist == 0:
+            return self._initial_corner_coords.copy()
+        return self._initial_corner_coords + (self._current_fractional_dist / self._total_dist) * self._direction
     
     def front_cells(self) -> List[np.ndarray]:
         cells = []
-        for f_j in self.F:
-            cell_coord = self.y + f_j
+        for f_j in self._adjacent_center_coords:
+            cell_coord = self._current_corner_coords + f_j
             cells.append(cell_coord)
         return cells
     
     def length(self) -> float:
-        return self.l
+        return self._current_fractional_dist
     
     def reached(self) -> bool:
-        return np.min(self.D) >= 1.0
+        return np.min(self._next_fractional_dist) >= 1.0
 
     def next(self):
-        min_D_value = np.min(self.D)
-        i_star_indices = np.where(self.D == min_D_value)[0]
+        min_D_value = np.min(self._next_fractional_dist)
+        i_star_indices = np.where(self._next_fractional_dist == min_D_value)[0]
         
         for i_star in i_star_indices:
-            self.k[i_star] += 1
+            self._fractional_dist_counters[i_star] += 1
         
-        self.l = min_D_value * self.norm_delta_x
+        self._current_fractional_dist = min_D_value * self._total_dist
     
         for i_star in i_star_indices:
-            if abs(self.delta_x[i_star]) > 1e-10:
-                self.D[i_star] = self.D_0[i_star] + (self.k[i_star] / abs(self.delta_x[i_star]))
+            if abs(self._direction[i_star]) > 1e-10:
+                self._next_fractional_dist[i_star] = self._initial_fractional_dist[i_star] + (self._fractional_dist_counters[i_star] / abs(self._direction[i_star]))
             else:
-                self.D[i_star] = float('inf')
+                self._next_fractional_dist[i_star] = float('inf')
 
         for i_star in i_star_indices:
-            self.y[i_star] += self.delta_x_sign[i_star]
+            self._current_corner_coords[i_star] += self._sign_direction[i_star]
 
-        self.t += 1
-        self._determine_front_cells()
-
-class RayTracerBaseIntegerOptimized(RayTracerBase):
-    """
-    N-Dimensional Ray Tracer optimized for integer start and end coordinates.
-    """
-    def init(self, x_0: np.ndarray, x_f: np.ndarray):
-        """
-        Initializes the ray from start (x_0) to goal (x_f).
-        Assumes x_0 and x_f contain integers.
-        This is an optimized version of RayTracerBase.init for integer coordinates.
-        """
-        self.x_0 = np.array(x_0, dtype=int)
-        self.x_f = np.array(x_f, dtype=int)
-        self.n = len(x_0)
-        self.t = 0
-        
-        self.delta_x = self.x_f - self.x_0
-        self.abs_delta_x = np.abs(self.delta_x)
-        self.l = 0
-        self.k = np.zeros(self.n, dtype=int)
-        self.norm_delta_x = np.linalg.norm(self.delta_x)
-        
-        # Initialize arrays
-        self.delta_x_sign = np.sign(self.delta_x).astype(int)
-        self.y = self.x_0.copy()
-        self.D = np.zeros(self.n, dtype=float)
-        
-        # Calculate D
-        for i in range(self.n):
-            if self.abs_delta_x[i] == 0:
-                self.D[i] = float('inf')
-            else:
-                self.D[i] = 1.0 / self.abs_delta_x[i]
-        
-        self.D_0 = self.D.copy()
-        self._determine_front_cells()
-
-    def _determine_front_cells_recursive(self, dim, current_f):
-        if dim == self.n:
-            return [current_f.copy()]
-
-        f_list = []
-        
-        # If delta_x is zero for the current dimension, the front can be on either side.
-        if self.delta_x[dim] == 0:
-            # Case 1: f[dim] = -1
-            current_f[dim] = -1
-            f_list.extend(self._determine_front_cells_recursive(dim + 1, current_f))
-            
-            # Case 2: f[dim] = 0
-            current_f[dim] = 0
-            f_list.extend(self._determine_front_cells_recursive(dim + 1, current_f))
-        else:
-            # If delta_x is not zero, the front is determined by the sign of delta_x.
-            current_f[dim] = -1 if self.delta_x_sign[dim] < 0 else 0
-            f_list.extend(self._determine_front_cells_recursive(dim + 1, current_f))
-            
-        return f_list
-
+     
 
 class RayTracer:
-    """
-    A factory and proxy for ray tracer implementations.
-    It selects the appropriate tracer (float or integer-optimized)
-    based on the input coordinates and delegates calls to it.
-    """
     def __init__(self):
-        self._tracer: Optional[RayTracerBase] = None
+        self._tracer: Optional[Any] = None
 
     def init(self, x_0: np.ndarray, x_f: np.ndarray):
         x_0_arr = np.asarray(x_0)
         x_f_arr = np.asarray(x_f)
-
-        is_integer_input = np.all(np.mod(x_0_arr, 1) == 0) and np.all(np.mod(x_f_arr, 1) == 0)
-
-        if is_integer_input:
-            self._tracer = RayTracerBaseIntegerOptimized()
-        else:
-            self._tracer = RayTracerBase()
+       
+        self._tracer = RayTracerBase()
         
         self._tracer.init(x_0_arr, x_f_arr)
 
@@ -230,33 +150,34 @@ class RayTracer:
         return getattr(self._tracer, name)
 
 class ObstacleSet:
-    """
-    Manages the set of obstacles.
-    """
     def __init__(self, obstacles: Optional[List[np.ndarray]] = None):
         self.obstacle_set = {tuple(obs) for obs in obstacles} if obstacles else set()
 
     def is_obstacle(self, coord: Tuple[int, ...]) -> bool:
-        """Checks if a given coordinate is an obstacle."""
         return tuple(coord) in self.obstacle_set
 
+def create_obstacle_function(obstacles: Optional[List[np.ndarray]] = None) -> Callable[[Tuple[int, ...]], bool]:
+    if obstacles is None:
+        return lambda coord: False
+    
+    obstacle_set = {tuple(obs.astype(int)) for obs in obstacles}
+    return lambda coord: tuple(coord) in obstacle_set
+
+
 class ObstacleRayTracer:
-    """
-    A wrapper for RayTracerBase that handles obstacle detection.
-    """
     def __init__(self):
         self.tracer = RayTracer()
-        self.obstacle_manager: Optional[ObstacleSet] = None
+        self.is_obstacle: Callable[[Tuple[int, ...]], bool] = lambda coord: False
         self.prev_front_cell_status: Optional[np.ndarray] = None
         self.current_front_cell_status: Optional[np.ndarray] = None
         self.loose_dimension: int = 0
         self.possible_offsets: List[np.ndarray] = []
 
-    def init(self, x_0: np.ndarray, x_f: np.ndarray, obstacles: Optional[List[np.ndarray]] = None, loose_dimension: int = 0):
+    def init(self, x_0: np.ndarray, x_f: np.ndarray, is_obstacle: Optional[Callable[[Tuple[int, ...]], bool]] = None, loose_dimension: int = 0):
         self.tracer.init(x_0, x_f)
-        self.obstacle_manager = ObstacleSet(obstacles)
+        self.is_obstacle = is_obstacle or (lambda coord: False)
         self.loose_dimension = loose_dimension
-        self.prev_front_cell_status = np.ones(len(self.tracer.F), dtype=int)
+        self.prev_front_cell_status = np.ones(len(self.tracer._adjacent_center_coords), dtype=int)
         self.possible_offsets = self._generate_loose_dimensions_offsets_from_sign()
 
     def next(self):
@@ -277,38 +198,30 @@ class ObstacleRayTracer:
 
         all_offsets = []
         
-        # The dimensions along which the ray is moving
-        ray_move_dims = [i for i, d in enumerate(self.tracer.delta_x_sign) if d != 0]
+        ray_move_dims = [i for i, d in enumerate(self.tracer._sign_direction) if d != 0]
 
-        # Generate offsets for dimensions with movement
         for i in range(1, self.loose_dimension + 1):
             if len(ray_move_dims) < i:
                 break
             for dims_to_change in itertools.combinations(ray_move_dims, i):
                 offset = np.zeros(self.tracer.n, dtype=int)
                 for dim in dims_to_change:
-                    offset[dim] = self.tracer.delta_x_sign[dim]
+                    offset[dim] = self.tracer._sign_direction[dim]
                 all_offsets.append(offset)
 
-        # Generate offsets for dimensions without movement
-        non_move_dims = [i for i, d in enumerate(self.tracer.delta_x_sign) if d == 0]
+        non_move_dims = [i for i, d in enumerate(self.tracer._sign_direction) if d == 0]
         for i in range(1, self.loose_dimension + 1):
             if len(non_move_dims) < i:
                 break
             for dims_to_change in itertools.combinations(non_move_dims, i):
-                # For each combination, generate all possible sign combinations
                 for signs in itertools.product([-1, 1], repeat=i):
                     offset = np.zeros(self.tracer.n, dtype=int)
                     for j, dim in enumerate(dims_to_change):
                         offset[dim] = signs[j]
                     all_offsets.append(offset)
         
-        # Also handle mixed offsets
         if self.loose_dimension > 1:
             for i in range(1, self.loose_dimension):
-                # i = number of moving dimensions
-                # self.loose_dimension - i = number of non-moving dimensions
-                
                 num_non_move_dims = self.loose_dimension - i
                 if len(ray_move_dims) < i or len(non_move_dims) < num_non_move_dims:
                     continue
@@ -318,7 +231,7 @@ class ObstacleRayTracer:
                         for signs in itertools.product([-1, 1], repeat=num_non_move_dims):
                             offset = np.zeros(self.tracer.n, dtype=int)
                             for dim in move_dims_combo:
-                                offset[dim] = self.tracer.delta_x_sign[dim]
+                                offset[dim] = self.tracer._sign_direction[dim]
                             for j, dim in enumerate(non_move_dims_combo):
                                 offset[dim] = signs[j]
                             all_offsets.append(offset)
@@ -368,29 +281,31 @@ class ObstacleRayTracer:
 
 
 class RayTracerVisualizer:
-    """
-    Handles visualization of the ray tracing process.
-    """
     def __init__(self):
         self.tracer = ObstacleRayTracer()
 
-    def traverse(self, x_0: np.ndarray, x_f: np.ndarray, obstacles: Optional[List[np.ndarray]] = None, loose_dimension: int = 0):
-        self.tracer.init(x_0, x_f, obstacles, loose_dimension)
+    def traverse(self, x_0: np.ndarray, x_f: np.ndarray, obstacles: Optional[List[np.ndarray]] = None, loose_dimension: int = 0, is_obstacle: Optional[Callable[[Tuple[int, ...]], bool]] = None):
+        if is_obstacle is None and obstacles is not None:
+            is_obstacle = create_obstacle_function(obstacles)
+        elif is_obstacle is None:
+            is_obstacle = lambda coord: False
         
-        path = [self.tracer.tracer.x_0.copy()]
+        self.tracer.init(x_0, x_f, is_obstacle, loose_dimension)
+        
+        path = [self.tracer.tracer._initial_corner_coords.copy()]
         all_front_cells = [self.tracer.tracer.front_cells()]
-        y_coords_history = [self.tracer.tracer.y.copy()]
-        intersection_coords = [self.tracer.tracer.x_0.copy()]
+        y_coords_history = [self.tracer.tracer._current_corner_coords.copy()]
+        intersection_coords = [self.tracer.tracer._initial_corner_coords.copy()]
 
         isGoalReached = False
         obstacle_hit = False
 
         initial_front_cells = all_front_cells[-1]
-        if self.tracer.is_hit_obstacle(initial_front_cells, initial_front_cells, self.tracer.obstacle_manager.is_obstacle):
+        if self.tracer.is_hit_obstacle(initial_front_cells, initial_front_cells, self.tracer.is_obstacle):
             obstacle_hit = True
-        elif np.array_equal(self.tracer.tracer.x_0, x_f):
+        elif np.array_equal(self.tracer.tracer._initial_corner_coords, x_f):
             isGoalReached = True
-            if self.tracer.obstacle_manager.is_obstacle(tuple(np.round(x_f).astype(int))):
+            if self.tracer.is_obstacle(tuple(np.round(x_f).astype(int))):
                  obstacle_hit = True
                  isGoalReached = False
         else:
@@ -401,9 +316,9 @@ class RayTracerVisualizer:
                 
                 path.append(self.tracer.tracer.coords().copy())
                 intersection_coords.append(self.tracer.tracer.coords().copy())
-                y_coords_history.append(self.tracer.tracer.y.copy())
+                y_coords_history.append(self.tracer.tracer._current_corner_coords.copy())
                 
-                if self.tracer.is_hit_obstacle(prev_front_cells, new_front_cells, self.tracer.obstacle_manager.is_obstacle):
+                if self.tracer.is_hit_obstacle(prev_front_cells, new_front_cells, self.tracer.is_obstacle):
                     obstacle_hit = True
                     break
                 

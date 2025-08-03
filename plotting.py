@@ -126,10 +126,39 @@ def plot_2d_trace_with_proper_front_cells(x_0, x_f, path, all_front_cells, inter
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=12)
     plt.grid(True, which='both', color='gray', linestyle='-', linewidth=0.3)
     
-    plt.xlim(0, 10)
-    plt.ylim(0, 10)
-    plt.xticks(np.arange(0, 11, 1))
-    plt.yticks(np.arange(0, 11, 1))
+    # Use dynamic limits based on actual coordinates with some padding
+    # Ensure boundaries are integers for clean grid alignment
+    min_coord_x_int = int(np.floor(min_coord_x))
+    max_coord_x_int = int(np.ceil(max_coord_x))
+    min_coord_y_int = int(np.floor(min_coord_y))
+    max_coord_y_int = int(np.ceil(max_coord_y))
+    
+    # Ensure 1:1 aspect ratio by making both axes have the same range
+    x_range = max_coord_x_int - min_coord_x_int
+    y_range = max_coord_y_int - min_coord_y_int
+    max_range = max(x_range, y_range)
+    
+    # Center the smaller range around its current center
+    if x_range < max_range:
+        x_center = (min_coord_x_int + max_coord_x_int) / 2
+        half_range = max_range / 2
+        min_coord_x_int = int(x_center - half_range)
+        max_coord_x_int = int(x_center + half_range)
+    
+    if y_range < max_range:
+        y_center = (min_coord_y_int + max_coord_y_int) / 2
+        half_range = max_range / 2
+        min_coord_y_int = int(y_center - half_range)
+        max_coord_y_int = int(y_center + half_range)
+    
+    plt.xlim(min_coord_x_int, max_coord_x_int)
+    plt.ylim(min_coord_y_int, max_coord_y_int)
+    
+    # Set ticks dynamically based on coordinate range with integer steps
+    tick_step = max(1, int(max_range / 10))  # Use same tick step for both axes
+    
+    plt.xticks(np.arange(min_coord_x_int, max_coord_x_int + 1, tick_step))
+    plt.yticks(np.arange(min_coord_y_int, max_coord_y_int + 1, tick_step))
     plt.gca().set_aspect('equal', adjustable='box')
     plt.tight_layout()
 
@@ -157,16 +186,49 @@ def plot_3d_trace_with_proper_front_cells(x_0, x_f, path, all_front_cells, inter
     fig = plt.figure(figsize=(16, 12))
     ax = fig.add_subplot(111, projection='3d')
     
-    min_coord_line = -1
-    max_coord_line = 6
+    # Determine plot limits dynamically
+    all_x_coords = []
+    all_y_coords = []
+    all_z_coords = []
 
-    for i in range(min_coord_line, max_coord_line + 1):
-        ax.plot([min_coord_line, max_coord_line], [i, i], [min_coord_line, min_coord_line], 
-                color='lightgray', linestyle='--', alpha=0.3, linewidth=0.5)
-        ax.plot([i, i], [min_coord_line, max_coord_line], [min_coord_line, min_coord_line], 
-                color='lightgray', linestyle='--', alpha=0.3, linewidth=0.5)
-        ax.plot([i, i], [min_coord_line, min_coord_line], [min_coord_line, max_coord_line], 
-                color='lightgray', linestyle='--', alpha=0.3, linewidth=0.5)
+    if path:
+        path_np_temp = np.array(path)
+        if path_np_temp.ndim == 2 and path_np_temp.shape[1] >= 3:
+            all_x_coords.extend(path_np_temp[:, 0])
+            all_y_coords.extend(path_np_temp[:, 1])
+            all_z_coords.extend(path_np_temp[:, 2])
+
+    for fcs in all_front_cells:
+        for fc_val in fcs:
+            if hasattr(fc_val, '__len__') and len(fc_val) >= 3:
+                all_x_coords.append(fc_val[0])
+                all_y_coords.append(fc_val[1])
+                all_z_coords.append(fc_val[2])
+    
+    all_x_coords.extend([x_0[0], x_f[0]])
+    all_y_coords.extend([x_0[1], x_f[1]])
+    all_z_coords.extend([x_0[2], x_f[2]])
+
+    if y_coords_history:
+        valid_y_coords = [y for y in y_coords_history if hasattr(y, '__len__') and len(y) >= 3]
+        if valid_y_coords:
+            all_x_coords.extend([y[0] for y in valid_y_coords])
+            all_y_coords.extend([y[1] for y in valid_y_coords])
+            all_z_coords.extend([y[2] for y in valid_y_coords])
+
+    if obstacles:
+        for obs in obstacles:
+            if hasattr(obs, '__len__') and len(obs) >= 3:
+                all_x_coords.extend([obs[0], obs[0] + 1])
+                all_y_coords.extend([obs[1], obs[1] + 1])
+                all_z_coords.extend([obs[2], obs[2] + 1])
+
+    min_coord_x = min(all_x_coords) - 1 if all_x_coords else -2
+    max_coord_x = max(all_x_coords) + 1 if all_x_coords else 7
+    min_coord_y = min(all_y_coords) - 1 if all_y_coords else -2
+    max_coord_y = max(all_y_coords) + 1 if all_y_coords else 7
+    min_coord_z = min(all_z_coords) - 1 if all_z_coords else -2
+    max_coord_z = max(all_z_coords) + 1 if all_z_coords else 7
 
     path_np = np.array(path)
     ax.plot(path_np[:, 0], path_np[:, 1], path_np[:, 2], 'b-', label="Ray Path", linewidth=4, alpha=0.9)
@@ -256,11 +318,53 @@ def plot_3d_trace_with_proper_front_cells(x_0, x_f, path, all_front_cells, inter
     ax.set_zlabel("Z-coordinate", fontsize=14)
     ax.legend(loc='upper left', fontsize=12)
     
-    ax.set_xlim(min_coord_line - 0.5, max_coord_line + 0.5)
-    ax.set_ylim(min_coord_line - 0.5, max_coord_line + 0.5)
-    ax.set_zlim(min_coord_line - 0.5, max_coord_line + 0.5)
+    # Use dynamic limits based on actual coordinates with integer boundaries
+    min_coord_x_int = int(np.floor(min_coord_x))
+    max_coord_x_int = int(np.ceil(max_coord_x))
+    min_coord_y_int = int(np.floor(min_coord_y))
+    max_coord_y_int = int(np.ceil(max_coord_y))
+    min_coord_z_int = int(np.floor(min_coord_z))
+    max_coord_z_int = int(np.ceil(max_coord_z))
+    
+    # Ensure 1:1:1 aspect ratio by making all axes have the same range
+    x_range = max_coord_x_int - min_coord_x_int
+    y_range = max_coord_y_int - min_coord_y_int
+    z_range = max_coord_z_int - min_coord_z_int
+    max_range = max(x_range, y_range, z_range)
+    
+    # Center each axis range around its current center
+    if x_range < max_range:
+        x_center = (min_coord_x_int + max_coord_x_int) / 2
+        half_range = max_range / 2
+        min_coord_x_int = int(x_center - half_range)
+        max_coord_x_int = int(x_center + half_range)
+    
+    if y_range < max_range:
+        y_center = (min_coord_y_int + max_coord_y_int) / 2
+        half_range = max_range / 2
+        min_coord_y_int = int(y_center - half_range)
+        max_coord_y_int = int(y_center + half_range)
+    
+    if z_range < max_range:
+        z_center = (min_coord_z_int + max_coord_z_int) / 2
+        half_range = max_range / 2
+        min_coord_z_int = int(z_center - half_range)
+        max_coord_z_int = int(z_center + half_range)
+    
+    ax.set_xlim(min_coord_x_int, max_coord_x_int)
+    ax.set_ylim(min_coord_y_int, max_coord_y_int)
+    ax.set_zlim(min_coord_z_int, max_coord_z_int)
     
     ax.set_box_aspect([1,1,1])
+    
+    # Generate grid lines using the final scaled boundaries
+    for i in range(min_coord_x_int, max_coord_x_int + 1):
+        ax.plot([min_coord_x_int, max_coord_x_int], [i, i], [min_coord_z_int, min_coord_z_int], 
+                color='lightgray', linestyle='--', alpha=0.3, linewidth=0.5)
+        ax.plot([i, i], [min_coord_y_int, max_coord_y_int], [min_coord_z_int, min_coord_z_int], 
+                color='lightgray', linestyle='--', alpha=0.3, linewidth=0.5)
+        ax.plot([i, i], [min_coord_y_int, min_coord_y_int], [min_coord_z_int, max_coord_z_int], 
+                color='lightgray', linestyle='--', alpha=0.3, linewidth=0.5)
     
     if y_coords_history is not None and len(y_coords_history) > 0:
         y_coords_np = np.array([y for y in y_coords_history if hasattr(y, '__len__') and len(y) >= 3])
